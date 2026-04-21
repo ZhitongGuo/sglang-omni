@@ -56,7 +56,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="0.1.0" />
-    <meta name="docbuild:last-update" content="Mar 26, 2026"/>
+    <meta name="docbuild:last-update" content="Apr 21, 2026"/>
   </head>
   
   
@@ -157,6 +157,7 @@
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Basic Usage</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../basic_usage/qwen3_omni.html">Omni Model Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../basic_usage/tts_s2pro.html">TTS Model Usage</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">Benchmarks</span></p>
@@ -431,7 +432,7 @@
 <h2>Role in the System<a class="headerlink" href="#role-in-the-system" title="Link to this heading">#</a></h2>
 <p>The API server is the outer protocol layer on top of the <code class="docutils literal notranslate"><span class="pre">sglang-omni</span></code> pipeline runtime.</p>
 <p>At a high level, the request path is:</p>
-<p><code class="docutils literal notranslate"><span class="pre">CLI</span> <span class="pre">/</span> <span class="pre">Python</span> <span class="pre">entrypoint</span></code> → <code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code> → <code class="docutils literal notranslate"><span class="pre">compile_pipeline()</span></code> → <code class="docutils literal notranslate"><span class="pre">PipelineRunner</span></code> → <code class="docutils literal notranslate"><span class="pre">Coordinator</span></code> → <code class="docutils literal notranslate"><span class="pre">Client</span></code> → <code class="docutils literal notranslate"><span class="pre">FastAPI</span></code></p>
+<p><code class="docutils literal notranslate"><span class="pre">CLI</span> <span class="pre">/</span> <span class="pre">Python</span> <span class="pre">entrypoint</span></code> → <code class="docutils literal notranslate"><span class="pre">PipelineConfig</span></code> → <code class="docutils literal notranslate"><span class="pre">Pipeline</span> <span class="pre">Startup</span></code> → <code class="docutils literal notranslate"><span class="pre">Coordinator</span></code> → <code class="docutils literal notranslate"><span class="pre">Client</span></code> → <code class="docutils literal notranslate"><span class="pre">FastAPI</span></code></p>
 <p>That split keeps responsibilities clean:</p>
 <ul class="simple">
 <li><p>the pipeline runtime handles orchestration and execution</p></li>
@@ -705,7 +706,7 @@ By SGLang-Omni Team
   
   <div class="footer-item">
     <p class="last-updated">
-  Last updated on Mar 26, 2026.
+  Last updated on Apr 21, 2026.
   <br/>
 </p>
   </div>
