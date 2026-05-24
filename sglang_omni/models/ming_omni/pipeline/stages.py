@@ -92,11 +92,21 @@ def create_image_encoder_executor(
     *,
     device: str = "cuda",
     dtype: str | None = None,
+    tp_rank: int = 0,
+    tp_size: int = 1,
+    nccl_port: int | None = None,
 ) -> EngineExecutor:
     """Create an image encoder executor for the Ming-Omni vision pipeline."""
     from sglang_omni.models.ming_omni.components.image_encoder import MingImageEncoder
 
-    model = MingImageEncoder(model_path=model_path, device=device, dtype=dtype)
+    model = MingImageEncoder(
+        model_path=model_path,
+        device=device,
+        dtype=dtype,
+        tp_rank=tp_rank,
+        tp_size=tp_size,
+        nccl_port=nccl_port,
+    )
 
     def _request_builder(payload: StagePayload):
         state = load_state(payload)

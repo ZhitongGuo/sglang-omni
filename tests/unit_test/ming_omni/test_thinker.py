@@ -82,7 +82,7 @@ def test_ming_image_encoder_keeps_its_tp_context_for_runtime_forward() -> None:
     source = _read(MING_IMAGE_ENCODER_PATH)
     init_body = source.split("    @staticmethod", 1)[0]
 
-    assert "self._init_sglang_tp()" in init_body
+    assert "self._init_sglang_tp(" in init_body
     assert "self._cleanup_sglang_tp()" not in init_body
 
 
