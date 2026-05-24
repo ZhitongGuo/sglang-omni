@@ -142,6 +142,19 @@ def test_ming_stages_import_light_and_accept_mp_injection_args() -> None:
     assert "nccl_port" in sig.parameters
 
 
+def test_ming_image_encoder_factory_accepts_tp_injection_args() -> None:
+    stages = importlib.import_module("sglang_omni.models.ming_omni.stages")
+
+    sig = inspect.signature(stages.create_image_encoder_executor)
+
+    assert "tp_rank" in sig.parameters
+    assert "tp_size" in sig.parameters
+    assert "nccl_port" in sig.parameters
+    assert sig.parameters["tp_rank"].default == 0
+    assert sig.parameters["tp_size"].default == 1
+    assert sig.parameters["nccl_port"].default is None
+
+
 def test_ming_talker_factory_returns_scheduler_contract(monkeypatch) -> None:
     talker_module = ModuleType(
         "sglang_omni.models.ming_omni.components.talker_executor"

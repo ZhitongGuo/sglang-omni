@@ -18,7 +18,6 @@ from typing import Iterable, Tuple
 
 import torch
 import torch.nn as nn
-
 from sglang.srt.layers.linear import ColumnParallelLinear, RowParallelLinear
 
 from sglang_omni.models.weight_loader import default_weight_loader
@@ -40,8 +39,11 @@ class VisionProjector(nn.Module):
         gather_first = mlp_depth == 1
         layers: list[nn.Module] = [
             ColumnParallelLinear(
-                vision_dim, llm_dim, bias=True,
-                gather_output=gather_first, quant_config=None,
+                vision_dim,
+                llm_dim,
+                bias=True,
+                gather_output=gather_first,
+                quant_config=None,
             )
         ]
         for _ in range(1, mlp_depth):
