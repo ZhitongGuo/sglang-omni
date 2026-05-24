@@ -237,6 +237,7 @@ def test_ming_text_launcher_places_tp_ranks_on_distinct_gpus(monkeypatch) -> Non
         cpu_offload_gb=0,
         gpu_audio_encoder=None,
         gpu_image_encoder=None,
+        image_encoder_tp=1,
         thinker_only=False,
         mem_fraction_static=None,
         thinker_max_seq_len=8192,
@@ -273,7 +274,8 @@ def test_ming_text_launcher_allows_encoder_gpu_overrides(monkeypatch) -> None:
         quantization=None,
         cpu_offload_gb=0,
         gpu_audio_encoder=4,
-        gpu_image_encoder=4,
+        gpu_image_encoder=[4],
+        image_encoder_tp=1,
         thinker_only=False,
         mem_fraction_static=None,
         thinker_max_seq_len=8192,
@@ -314,6 +316,7 @@ def test_ming_text_launcher_can_build_thinker_only_smoke_pipeline(
         cpu_offload_gb=0,
         gpu_audio_encoder=None,
         gpu_image_encoder=None,
+        image_encoder_tp=1,
         thinker_only=True,
         mem_fraction_static=None,
         thinker_max_seq_len=8192,
@@ -332,6 +335,44 @@ def test_ming_text_launcher_can_build_thinker_only_smoke_pipeline(
     assert stages["mm_aggregate"].wait_for == ["preprocessing"]
     assert stages["thinker"].gpu == [0, 1, 2, 3]
     assert stages["thinker"].tp_size == 4
+
+
+def test_ming_text_launcher_configures_image_encoder_tp(monkeypatch) -> None:
+    from examples.run_ming_omni_server import _launch_text_server
+
+    captured: dict[str, object] = {}
+    serve_module = ModuleType("sglang_omni.serve")
+
+    def fake_launch_server(config, **kwargs):
+        del kwargs
+        captured["config"] = config
+
+    serve_module.launch_server = fake_launch_server
+    monkeypatch.setitem(sys.modules, "sglang_omni.serve", serve_module)
+
+    args = SimpleNamespace(
+        model_path="dummy",
+        relay_backend="shm",
+        tp_size=1,
+        quantization=None,
+        cpu_offload_gb=0,
+        gpu_audio_encoder=None,
+        gpu_image_encoder=[2, 3],
+        image_encoder_tp=2,
+        thinker_only=False,
+        mem_fraction_static=None,
+        thinker_max_seq_len=8192,
+        host="127.0.0.1",
+        port=8000,
+        model_name="ming-omni",
+    )
+
+    _launch_text_server(args)
+
+    config = captured["config"]
+    stages = {stage.name: stage for stage in config.stages}
+    assert stages["image_encoder"].tp_size == 2
+    assert stages["image_encoder"].gpu == [2, 3]
 
 
 def test_ming_thinker_factory_registers_hf_config_before_server_args(

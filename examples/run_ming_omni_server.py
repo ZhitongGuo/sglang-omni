@@ -65,7 +65,10 @@ def parse_args() -> argparse.Namespace:
         type=int,
         nargs="+",
         default=None,
-        help="GPU id(s) for the image encoder stage.",
+        help=(
+            "GPU id(s) for the image encoder stage. "
+            "For --image-encoder-tp N, pass N GPU ids."
+        ),
     )
     parser.add_argument(
         "--image-encoder-tp",
@@ -219,8 +222,7 @@ def _launch_text_server(args: argparse.Namespace) -> None:
         img_stage.parallelism = img_stage.parallelism.model_copy(
             update={"tp": image_encoder_tp}
         )
-        gpu_list = args.gpu_image_encoder or list(range(image_encoder_tp))
-        img_stage.gpu = gpu_list
+        img_stage.gpu = args.gpu_image_encoder or list(range(image_encoder_tp))
     elif args.gpu_image_encoder is not None:
         _set_stage_gpu(config, "image_encoder", args.gpu_image_encoder[0])
     if args.quantization:
