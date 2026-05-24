@@ -307,7 +307,7 @@ class MingTalkerExecutor:
         return stream_state.get("accumulated_text", "")
 
     @torch.no_grad()
-    def _generate_speech(self, text: str) -> tuple[torch.Tensor | None, int, float]:
+    def _generate_speech(self, text: str) -> tuple[torch.Tensor, int, float]:
         """Generate speech from text using MingOmniTalker.
 
         Returns:
@@ -338,11 +338,10 @@ class MingTalkerExecutor:
                 if tts_speech is not None:
                     all_wavs.append(tts_speech)
         else:
-            logger.error("Talker has no supported generation method")
-            return None, 44100, 0.0
+            raise RuntimeError("Talker has no supported generation method")
 
         if not all_wavs:
-            return None, 44100, 0.0
+            raise RuntimeError("Talker produced no audio")
 
         waveform = torch.cat(all_wavs, dim=-1)
         sample_rate = 44100

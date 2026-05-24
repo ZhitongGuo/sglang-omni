@@ -31,10 +31,7 @@ from sglang_omni.scheduling.messages import IncomingMessage, OutgoingMessage
 
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Stubs for upstream subsystems we don't use
-# ---------------------------------------------------------------------------
+_FAILED_BATCH_RESULT = object()
 
 
 class _NoOpSender:
@@ -63,11 +60,6 @@ class _NoOpGrammarManager:
 
     def __len__(self) -> int:
         return 0
-
-
-# ---------------------------------------------------------------------------
-# OmniScheduler
-# ---------------------------------------------------------------------------
 
 
 class OmniScheduler:
@@ -391,10 +383,6 @@ class OmniScheduler:
             self.attn_tp_rank == 0 or self.enable_metrics_for_all_schedulers
         )
 
-    # ------------------------------------------------------------------
-    # Overridden methods (take precedence over __getattr__)
-    # ------------------------------------------------------------------
-
     def get_next_batch_to_run(self):
         batch = _Upstream.get_next_batch_to_run(self)
         if batch is not None and not self._is_batch_ready_to_run(batch):
@@ -568,6 +556,13 @@ class OmniScheduler:
         )
 
     def run_batch(self, batch, pp_proxy_tensors=None):
+        try:
+            return self._run_batch(batch, pp_proxy_tensors)
+        except Exception as exc:
+            self._handle_batch_failure(batch, exc)
+            return _FAILED_BATCH_RESULT
+
+    def _run_batch(self, batch, pp_proxy_tensors=None):
         """Run a batch through the model runner.
 
         The custom model runner (for example ThinkerModelRunner or a
@@ -613,6 +608,21 @@ class OmniScheduler:
         # Fallback: call upstream's run_batch (uses tp_worker directly)
         return _Upstream.run_batch(self, batch, pp_proxy_tensors)
 
+    def _handle_batch_failure(self, batch: Any, error: Exception) -> None:
+        reqs = list(batch.reqs)
+        request_ids = [req.rid for req in reqs]
+        logger.exception("OmniScheduler batch failed for requests=%s", request_ids)
+        for req in reqs:
+            if self.is_entry_rank:
+                self.outbox.put(
+                    OutgoingMessage(
+                        request_id=req.rid,
+                        type="error",
+                        data=error,
+                    )
+                )
+            self.abort(req.rid)
+
     def stream_output(self, reqs, return_logprob=False, skip_req=None):
         """Intercept finished requests and emit to outbox.
 
@@ -654,10 +664,6 @@ class OmniScheduler:
         """No-op — results are routed through the stage outbox."""
         return None
 
-    # ------------------------------------------------------------------
-    # Stream chunk handling
-    # ------------------------------------------------------------------
-
     def _on_stream_chunk(self, request_id: str, chunk: Any) -> None:
         req_data = self._find_request_data(request_id)
         if req_data is not None:
@@ -671,10 +677,6 @@ class OmniScheduler:
             self._mark_stream_done(req_data)
             return
         self._pending_stream_done.add(request_id)
-
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
 
     def start(self) -> None:
         self._running = True
@@ -709,10 +711,6 @@ class OmniScheduler:
         _remove_from_batch(self.last_batch, request_id)
         self._drain_inbox_for_request(request_id)
 
-    # ------------------------------------------------------------------
-    # Event loops
-    # ------------------------------------------------------------------
-
     def _event_loop_normal(self) -> None:
         # Note (Chenyang): yield the GIL when idle so co-located non-AR stages
         # (encoders, preprocessor) running in sibling threads aren't starved
@@ -733,7 +731,8 @@ class OmniScheduler:
 
             if batch:
                 result = self.run_batch(batch)
-                self.process_batch_result(batch, result)
+                if result is not _FAILED_BATCH_RESULT:
+                    self.process_batch_result(batch, result)
             else:
                 self.self_check_during_idle()
                 time.sleep(0.001)
@@ -765,7 +764,10 @@ class OmniScheduler:
 
             if batch:
                 batch_result = self.run_batch(batch)
-                self.result_queue.append((batch.copy(), batch_result))
+                if batch_result is not _FAILED_BATCH_RESULT:
+                    self.result_queue.append((batch.copy(), batch_result))
+                else:
+                    batch_result = None
             else:
                 batch_result = None
 
@@ -781,10 +783,6 @@ class OmniScheduler:
             self.last_batch = batch
             if envs.SGLANG_ENABLE_STRICT_MEM_CHECK_DURING_BUSY.get():
                 self.self_check_during_busy()
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
 
     def _drain_inbox_for_request(self, request_id: str) -> None:
         retained: list[IncomingMessage] = []

@@ -60,6 +60,47 @@ def test_ming_talker_add_request_propagates_generation_errors(
             delattr(parent, "talker_executor")
 
 
+def test_ming_talker_generation_failures_are_not_empty_successes(monkeypatch) -> None:
+    module_name = "sglang_omni.models.ming_omni.components.talker_executor"
+    parent_name = "sglang_omni.models.ming_omni.components"
+    sys.modules.pop(module_name, None)
+
+    fake_torch = ModuleType("torch")
+    fake_torch.bfloat16 = "bfloat16"
+    fake_torch.Tensor = object
+
+    def no_grad():
+        def decorator(fn):
+            return fn
+
+        return decorator
+
+    fake_torch.no_grad = no_grad
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    try:
+        module = importlib.import_module(module_name)
+
+        executor = module.MingTalkerExecutor(model_path="/fake/model/path")
+        executor._talker = object()
+        with pytest.raises(RuntimeError, match="no supported generation method"):
+            executor._generate_speech("hello")
+
+        class EmptyTalker:
+            def omni_audio_generation(self, **_kwargs):
+                yield None, None, None, None
+
+        executor._talker = EmptyTalker()
+        executor._vae = object()
+        with pytest.raises(RuntimeError, match="produced no audio"):
+            executor._generate_speech("hello")
+    finally:
+        sys.modules.pop(module_name, None)
+        parent = sys.modules.get(parent_name)
+        if parent is not None and hasattr(parent, "talker_executor"):
+            delattr(parent, "talker_executor")
+
+
 def test_ming_talker_skips_text_only_requests(monkeypatch) -> None:
     module_name = "sglang_omni.models.ming_omni.components.talker_executor"
     parent_name = "sglang_omni.models.ming_omni.components"
