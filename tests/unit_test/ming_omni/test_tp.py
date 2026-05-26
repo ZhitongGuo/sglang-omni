@@ -498,6 +498,53 @@ def test_ming_image_encoder_tp2_builds_rank_specific_stage_specs(monkeypatch) ->
     assert _cached_attrs_from_missing_project_modules() == []
 
 
+@pytest.mark.asyncio
+async def test_tp_leader_skips_fanout_work_for_omni_scheduler() -> None:
+    """OmniScheduler-backed leaders must not call fanout_work()."""
+    import queue as _queue_mod
+    from unittest.mock import MagicMock
+
+    from sglang_omni.pipeline.stage.runtime import Stage
+    from sglang_omni.pipeline.tp_control import TPLeaderFanout
+
+    fanout = MagicMock(spec=TPLeaderFanout)
+
+    omni_like = SimpleNamespace(
+        inbox=_queue_mod.Queue(),
+        requires_tp_work_fanout=False,
+    )
+    simple_like = SimpleNamespace(
+        inbox=_queue_mod.Queue(),
+        requires_tp_work_fanout=True,
+    )
+
+    def _make_stage(scheduler):
+        return Stage(
+            name="test_stage",
+            role="leader",
+            get_next=lambda _name: [],
+            gpu_id=0,
+            endpoints={},
+            control_plane=MagicMock(),
+            scheduler=scheduler,
+            tp_fanout=fanout,
+        )
+
+    payload = SimpleNamespace(request_id="req-1")
+
+    stage_omni = _make_stage(omni_like)
+    await stage_omni._execute(payload)
+    fanout.fanout_work.assert_not_called()
+    assert omni_like.inbox.get_nowait().request_id == "req-1"
+
+    fanout.reset_mock()
+
+    stage_simple = _make_stage(simple_like)
+    await stage_simple._execute(payload)
+    fanout.fanout_work.assert_called_once_with(payload)
+    assert simple_like.inbox.get_nowait().request_id == "req-1"
+
+
 def test_ming_image_encoder_tp2_config_accepts_gpu_list() -> None:
     from sglang_omni.models.ming_omni.config import MingOmniPipelineConfig
 

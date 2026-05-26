@@ -102,6 +102,7 @@ class OmniScheduler:
     ):
         self.inbox: _queue_mod.Queue[IncomingMessage] = _queue_mod.Queue()
         self.outbox: _queue_mod.Queue[OutgoingMessage] = _queue_mod.Queue()
+        self.requires_tp_work_fanout: bool = False
 
         # --- Request builder: StagePayload → SGLangARRequestData ----------
         self._request_builder = request_builder

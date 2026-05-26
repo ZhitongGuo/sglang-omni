@@ -643,7 +643,11 @@ class Stage:
             stage=self.name,
             event_name="stage_dispatch",
         )
-        if self.role == "leader" and self._tp_fanout is not None:
+        if (
+            self.role == "leader"
+            and self._tp_fanout is not None
+            and getattr(self.scheduler, "requires_tp_work_fanout", False)
+        ):
             self._tp_fanout.fanout_work(payload)
         self.scheduler.inbox.put(
             IncomingMessage(request_id=request_id, type="new_request", data=payload)
