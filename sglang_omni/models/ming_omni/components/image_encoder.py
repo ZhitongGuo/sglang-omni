@@ -142,7 +142,12 @@ class MingImageEncoder(nn.Module):
             getattr(dp, "_ATTN_TP_SIZE", None) is not None and dp._ATTN_TP_SIZE > 0
         )
         if dp_tp_ready and parallel_state.model_parallel_is_initialized():
-            return  # Already initialized
+            if dp._ATTN_TP_SIZE != tp_size:
+                raise RuntimeError(
+                    f"TP already initialized with tp_size={dp._ATTN_TP_SIZE}, "
+                    f"cannot reinitialize with tp_size={tp_size}"
+                )
+            return
 
         os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
         if nccl_port is not None:

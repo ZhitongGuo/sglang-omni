@@ -375,6 +375,160 @@ def test_ming_text_launcher_configures_image_encoder_tp(monkeypatch) -> None:
     assert stages["image_encoder"].gpu == [2, 3]
 
 
+def test_ming_text_launcher_rejects_image_encoder_tp_zero(monkeypatch) -> None:
+    import pytest
+
+    from examples.run_ming_omni_server import _launch_text_server
+
+    serve_module = ModuleType("sglang_omni.serve")
+    serve_module.launch_server = lambda *a, **kw: None
+    monkeypatch.setitem(sys.modules, "sglang_omni.serve", serve_module)
+
+    args = SimpleNamespace(
+        model_path="dummy",
+        relay_backend="shm",
+        tp_size=1,
+        quantization=None,
+        cpu_offload_gb=0,
+        gpu_audio_encoder=None,
+        gpu_image_encoder=None,
+        image_encoder_tp=0,
+        thinker_only=False,
+        mem_fraction_static=None,
+        thinker_max_seq_len=8192,
+        host="127.0.0.1",
+        port=8000,
+        model_name="ming-omni",
+    )
+
+    with pytest.raises(ValueError, match="--image-encoder-tp must be >= 1"):
+        _launch_text_server(args)
+
+
+def test_ming_text_launcher_rejects_thinker_only_with_image_encoder_tp(
+    monkeypatch,
+) -> None:
+    import pytest
+
+    from examples.run_ming_omni_server import _launch_text_server
+
+    serve_module = ModuleType("sglang_omni.serve")
+    serve_module.launch_server = lambda *a, **kw: None
+    monkeypatch.setitem(sys.modules, "sglang_omni.serve", serve_module)
+
+    args = SimpleNamespace(
+        model_path="dummy",
+        relay_backend="shm",
+        tp_size=1,
+        quantization=None,
+        cpu_offload_gb=0,
+        gpu_audio_encoder=None,
+        gpu_image_encoder=None,
+        image_encoder_tp=2,
+        thinker_only=True,
+        mem_fraction_static=None,
+        thinker_max_seq_len=8192,
+        host="127.0.0.1",
+        port=8000,
+        model_name="ming-omni",
+    )
+
+    with pytest.raises(ValueError, match="--thinker-only cannot be used"):
+        _launch_text_server(args)
+
+
+def test_ming_text_launcher_requires_gpu_ids_for_image_encoder_tp(
+    monkeypatch,
+) -> None:
+    import pytest
+
+    from examples.run_ming_omni_server import _launch_text_server
+
+    serve_module = ModuleType("sglang_omni.serve")
+    serve_module.launch_server = lambda *a, **kw: None
+    monkeypatch.setitem(sys.modules, "sglang_omni.serve", serve_module)
+
+    args = SimpleNamespace(
+        model_path="dummy",
+        relay_backend="shm",
+        tp_size=1,
+        quantization=None,
+        cpu_offload_gb=0,
+        gpu_audio_encoder=None,
+        gpu_image_encoder=None,
+        image_encoder_tp=2,
+        thinker_only=False,
+        mem_fraction_static=None,
+        thinker_max_seq_len=8192,
+        host="127.0.0.1",
+        port=8000,
+        model_name="ming-omni",
+    )
+
+    with pytest.raises(ValueError, match="--gpu-image-encoder must be specified"):
+        _launch_text_server(args)
+
+
+def test_ming_text_launcher_rejects_mismatched_gpu_count(monkeypatch) -> None:
+    import pytest
+
+    from examples.run_ming_omni_server import _launch_text_server
+
+    serve_module = ModuleType("sglang_omni.serve")
+    serve_module.launch_server = lambda *a, **kw: None
+    monkeypatch.setitem(sys.modules, "sglang_omni.serve", serve_module)
+
+    args = SimpleNamespace(
+        model_path="dummy",
+        relay_backend="shm",
+        tp_size=1,
+        quantization=None,
+        cpu_offload_gb=0,
+        gpu_audio_encoder=None,
+        gpu_image_encoder=[2],
+        image_encoder_tp=2,
+        thinker_only=False,
+        mem_fraction_static=None,
+        thinker_max_seq_len=8192,
+        host="127.0.0.1",
+        port=8000,
+        model_name="ming-omni",
+    )
+
+    with pytest.raises(ValueError, match="requires exactly 2 GPU ids"):
+        _launch_text_server(args)
+
+
+def test_ming_text_launcher_rejects_duplicate_gpu_ids(monkeypatch) -> None:
+    import pytest
+
+    from examples.run_ming_omni_server import _launch_text_server
+
+    serve_module = ModuleType("sglang_omni.serve")
+    serve_module.launch_server = lambda *a, **kw: None
+    monkeypatch.setitem(sys.modules, "sglang_omni.serve", serve_module)
+
+    args = SimpleNamespace(
+        model_path="dummy",
+        relay_backend="shm",
+        tp_size=1,
+        quantization=None,
+        cpu_offload_gb=0,
+        gpu_audio_encoder=None,
+        gpu_image_encoder=[3, 3],
+        image_encoder_tp=2,
+        thinker_only=False,
+        mem_fraction_static=None,
+        thinker_max_seq_len=8192,
+        host="127.0.0.1",
+        port=8000,
+        model_name="ming-omni",
+    )
+
+    with pytest.raises(ValueError, match="GPU ids must be unique"):
+        _launch_text_server(args)
+
+
 def test_ming_thinker_factory_registers_hf_config_before_server_args(
     monkeypatch,
 ) -> None:
