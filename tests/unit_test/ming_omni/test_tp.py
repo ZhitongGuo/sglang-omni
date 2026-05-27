@@ -526,6 +526,7 @@ async def test_tp_leader_skips_fanout_work_for_omni_scheduler() -> None:
             gpu_id=0,
             endpoints={},
             control_plane=MagicMock(),
+            relay=MagicMock(),
             scheduler=scheduler,
             tp_fanout=fanout,
         )
