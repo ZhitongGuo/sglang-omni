@@ -4,6 +4,7 @@ from __future__ import annotations
 import fcntl
 import os
 import sys
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -229,12 +230,35 @@ def test_get_process_gpu_memory_retries_uuid_as_bytes(
 def test_get_process_gpu_memory_returns_zero_when_pid_not_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fake = FakeNVML(processes=[SimpleNamespace(pid=os.getpid() + 1, usedGpuMemory=1)])
+    fake = FakeNVML(processes=[SimpleNamespace(pid=os.getppid(), usedGpuMemory=1)])
     install_fake_nvml(monkeypatch, fake)
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
     assert gpu_memory.get_process_gpu_memory_bytes(0) == 0
     assert fake.index_handles == [0]
+
+
+def test_get_process_gpu_memory_returns_zero_when_no_process_is_listed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    install_fake_nvml(monkeypatch, FakeNVML(processes=[]))
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+
+    assert gpu_memory.get_process_gpu_memory_bytes(0) == 0
+
+
+def test_get_process_gpu_memory_returns_none_for_pids_from_another_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pid_max = int(Path("/proc/sys/kernel/pid_max").read_text())
+    host_processes = [
+        SimpleNamespace(pid=pid_max + 1, usedGpuMemory=30 * 1024**3),
+        SimpleNamespace(pid=pid_max + 2, usedGpuMemory=8 * 1024**3),
+    ]
+    install_fake_nvml(monkeypatch, FakeNVML(processes=host_processes))
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+
+    assert gpu_memory.get_process_gpu_memory_bytes(0) is None
 
 
 def test_get_process_gpu_memory_returns_none_on_query_failure(

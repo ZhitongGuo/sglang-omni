@@ -107,9 +107,11 @@ def is_process_scoped_memory_available() -> bool:
 def get_process_gpu_memory_bytes(logical_gpu_id: int) -> int | None:
     """Return current-process GPU memory on a CUDA logical device.
 
-    The returned value is in bytes. None means NVML is unavailable or the
-    process-scoped query failed. Invalid device mappings raise RuntimeError
-    because those are launch/configuration errors.
+    The returned value is in bytes. None means NVML is unavailable, the
+    process-scoped query failed, or NVML lists only PIDs from another PID
+    namespace (for example inside a container), so this process cannot be
+    matched. Invalid device mappings raise RuntimeError because those are
+    launch/configuration errors.
     """
 
     visible_devices = parse_cuda_visible_devices()
@@ -149,11 +151,21 @@ def get_process_gpu_memory_bytes(logical_gpu_id: int) -> int | None:
             handle = pynvml.nvmlDeviceGetHandleByIndex(logical_gpu_id)
 
         pid = os.getpid()
-        for proc in pynvml.nvmlDeviceGetComputeRunningProcesses(handle):
+        processes = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
+        for proc in processes:
             if proc.pid == pid:
                 return int(proc.usedGpuMemory)
             else:
                 pass
+        if processes and not any(is_pid_visible(proc.pid) for proc in processes):
+            logger.debug(
+                f"NVML lists GPU processes {[proc.pid for proc in processes]} "
+                "that are not visible in this PID namespace; process GPU memory "
+                "is unavailable"
+            )
+            return None
+        else:
+            pass
         return 0
     except InvalidGpuDeviceError:
         raise
@@ -162,6 +174,11 @@ def get_process_gpu_memory_bytes(logical_gpu_id: int) -> int | None:
         return None
     finally:
         shutdown_nvml(pynvml)
+
+
+def is_pid_visible(pid: int) -> bool:
+    """Return whether a PID exists in this process's PID namespace."""
+    return Path("/proc", str(pid)).exists()
 
 
 def get_gpu_device_info(logical_gpu_id: int) -> GpuDeviceInfo:
