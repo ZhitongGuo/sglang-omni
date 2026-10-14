@@ -24,6 +24,10 @@ else:
 
 logger = logging.getLogger(__name__)
 
+# note (Zhitong Guo): the kernel gives the initial PID namespace this fixed
+# inode (PROC_PID_INIT_INO). NVML reports PIDs from that namespace only.
+INITIAL_PID_NAMESPACE_INODE = 0xEFFFFFFC
+
 
 class InvalidGpuDeviceError(RuntimeError):
     pass
@@ -108,8 +112,8 @@ def get_process_gpu_memory_bytes(logical_gpu_id: int) -> int | None:
     """Return current-process GPU memory on a CUDA logical device.
 
     The returned value is in bytes. None means NVML is unavailable, the
-    process-scoped query failed, or NVML lists only PIDs from another PID
-    namespace (for example inside a container), so this process cannot be
+    process-scoped query failed, or this process runs in a separate PID
+    namespace (for example a container), where NVML's host PIDs cannot be
     matched. Invalid device mappings raise RuntimeError because those are
     launch/configuration errors.
     """
@@ -151,19 +155,15 @@ def get_process_gpu_memory_bytes(logical_gpu_id: int) -> int | None:
             handle = pynvml.nvmlDeviceGetHandleByIndex(logical_gpu_id)
 
         pid = os.getpid()
-        processes = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
-        for proc in processes:
+        for proc in pynvml.nvmlDeviceGetComputeRunningProcesses(handle):
             if proc.pid == pid:
                 return int(proc.usedGpuMemory)
             else:
                 pass
-        if processes and not any(
-            Path("/proc", str(proc.pid)).exists() for proc in processes
-        ):
+        if os.stat("/proc/self/ns/pid").st_ino != INITIAL_PID_NAMESPACE_INODE:
             logger.debug(
-                f"NVML lists GPU processes {[proc.pid for proc in processes]} "
-                "that are not visible in this PID namespace; process GPU memory "
-                "is unavailable"
+                "NVML reports host PIDs but this process runs in a separate PID "
+                "namespace; process GPU memory is unavailable"
             )
             return None
         else:
