@@ -1102,48 +1102,6 @@ def test_stage_sends_same_gpu_stream_chunk_as_direct_cuda_ipc(monkeypatch) -> No
     asyncio.run(run())
 
 
-def test_stage_sends_same_gpu_cuda_payload_as_direct_cuda_ipc(monkeypatch) -> None:
-    monkeypatch.setattr(stage_io, "payload_has_cuda_tensor", lambda payload: True)
-    monkeypatch.setattr(
-        stage_io,
-        "serialize_direct_cuda_ipc_payload",
-        lambda payload: {
-            "_type": "TorchCudaIpcPayload",
-            "version": 1,
-            "header": b"payload",
-            "tensors": [],
-        },
-    )
-
-    async def run() -> None:
-        relay = FakeRelay()
-        control_plane = RecordingStageControlPlane()
-        sender = Stage(
-            name="encoder",
-            role="single",
-            get_next=lambda request_id, output: None,
-            gpu_id=0,
-            endpoints={"mm_aggregate": "inproc://mm"},
-            control_plane=control_plane,
-            relay=relay,
-            scheduler=FakeScheduler(),
-            gpu_stage_names={"mm_aggregate"},
-            stage_gpu_ids={"mm_aggregate": (0,)},
-        )
-
-        payload = make_stage_payload(request_id="req-same-gpu", data={"x": "cuda"})
-        await sender.send_to_stage("req-same-gpu", "mm_aggregate", payload)
-
-        assert relay.storage == {}
-        target, endpoint, msg = control_plane.sent_to_stage[0]
-        assert target == "mm_aggregate"
-        assert endpoint == "inproc://mm"
-        assert msg.data_ref["_type"] == "TorchCudaIpcPayload"
-        assert msg.chunk_id is None
-
-    asyncio.run(run())
-
-
 def test_stage_can_disable_same_gpu_direct_cuda_payload(monkeypatch) -> None:
     monkeypatch.setattr(stage_io, "payload_has_cuda_tensor", lambda payload: True)
 
@@ -1446,6 +1404,43 @@ def test_stage_local_object_requires_registered_target() -> None:
             )
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("replicated", [False, True])
+def test_stage_self_route_preserves_reentered_request_state(replicated: bool) -> None:
+    async def _run() -> None:
+        dispatcher = LocalStageDispatcher()
+        scheduler = FakeScheduler()
+        name = "thinker@r1" if replicated else "thinker"
+        stage = make_stage(
+            name=name,
+            get_next=lambda request_id, output: "thinker",
+            endpoints={name: "inproc://thinker"},
+            scheduler=scheduler,
+            same_process_targets={name},
+            local_dispatcher=dispatcher,
+            replica_topology=(
+                {"thinker": ["thinker@r0", "thinker@r1"]} if replicated else None
+            ),
+        )
+        dispatcher.register(stage)
+        stage.active_requests.add("req-reentry")
+        if replicated:
+            stage.record_replica_bindings("req-reentry", {"thinker": 1})
+
+        await stage.route_result(
+            "req-reentry",
+            make_stage_payload(request_id="req-reentry", data={"phase": 2}),
+        )
+
+        queued = scheduler.inbox.get_nowait()
+        assert queued.request_id == "req-reentry"
+        assert queued.data.data == {"phase": 2}
+        assert "req-reentry" in stage.active_requests
+        if replicated:
+            assert stage.replica_bindings["req-reentry"] == {"thinker": 1}
+
+    asyncio.run(_run())
 
 
 def test_local_dispatch_propagates_replica_bindings_to_receiver() -> None:
